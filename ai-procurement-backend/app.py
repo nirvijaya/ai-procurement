@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
-from openai import OpenAI
+from anthropic import Anthropic
 from docx import Document
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -12,164 +12,126 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-client = OpenAI(
-    api_key=os.getenv("AZURE_AI_KEY"),
-    base_url="https://foundary1nir.services.ai.azure.com/api/projects/proj-default/openai/v1/"
-)
+client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-model_name = os.getenv("AZURE_MODEL", "gpt-4o")
+model_name = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
 
 
 # ─── Specialist Agents ────────────────────────────────────────────────────────
 
 def run_research_agent(category, budget, location):
     """Agent 1: Analyzes market context for the procurement category."""
-    response = client.responses.create(
+    response = client.messages.create(
         model=model_name,
-        input=[
-            {
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text":
-                    "You are a procurement market research specialist. "
-                    "Analyze the given procurement category and provide market context, "
-                    "typical vendor landscape, pricing benchmarks, and key considerations. "
-                    "Be concise and structured."
-                }]
-            },
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text":
-                    f"Category: {category}\nBudget: {budget}\nLocation: {location}\n\n"
-                    "Provide market research context for this procurement."
-                }]
+        max_tokens=1024,
+        temperature=0.2,
+        system=(
+            "You are a procurement market research specialist. "
+            "Analyze the given procurement category and provide market context, "
+            "typical vendor landscape, pricing benchmarks, and key considerations. "
+            "Be concise and structured."
+        ),
+        messages=[
+            {"role": "user", "content":
+                f"Category: {category}\nBudget: {budget}\nLocation: {location}\n\n"
+                "Provide market research context for this procurement."
             }
         ],
-        temperature=0.2,
     )
-    return response.output[0].content[0].text
+    return response.content[0].text
 
 
 def run_drafting_agent(category, budget, location, requirements, dynamic_fields, research_context):
     """Agent 2: Drafts the RFP using research context and inputs."""
     dynamic_text = "\n".join([f"{k}: {v}" for k, v in dynamic_fields.items()])
 
-    response = client.responses.create(
+    response = client.messages.create(
         model=model_name,
-        input=[
-            {
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text":
-                    "You are an expert RFP writer with deep procurement knowledge. "
-                    "Draft professional, comprehensive RFP documents using the provided "
-                    "market research context and requirements. Include all standard sections."
-                }]
-            },
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text":
-                    f"Market Research Context:\n{research_context}\n\n"
-                    f"Category: {category}\nBudget: {budget}\nLocation: {location}\n"
-                    f"Requirements:\n{requirements}\n"
-                    f"Additional Inputs:\n{dynamic_text}\n\n"
-                    "Draft a comprehensive RFP with: Scope, Deliverables, "
-                    "Evaluation Criteria, Compliance Requirements, Timeline."
-                }]
+        max_tokens=4096,
+        temperature=0.3,
+        system=(
+            "You are an expert RFP writer with deep procurement knowledge. "
+            "Draft professional, comprehensive RFP documents using the provided "
+            "market research context and requirements. Include all standard sections."
+        ),
+        messages=[
+            {"role": "user", "content":
+                f"Market Research Context:\n{research_context}\n\n"
+                f"Category: {category}\nBudget: {budget}\nLocation: {location}\n"
+                f"Requirements:\n{requirements}\n"
+                f"Additional Inputs:\n{dynamic_text}\n\n"
+                "Draft a comprehensive RFP with: Scope, Deliverables, "
+                "Evaluation Criteria, Compliance Requirements, Timeline."
             }
         ],
-        temperature=0.3,
     )
-    return response.output[0].content[0].text
+    return response.content[0].text
 
 
 def run_compliance_agent(rfp_draft):
     """Agent 3: Reviews the RFP draft for compliance gaps and regulatory issues."""
-    response = client.responses.create(
+    response = client.messages.create(
         model=model_name,
-        input=[
-            {
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text":
-                    "You are a procurement compliance specialist. "
-                    "Review RFP drafts and identify missing compliance clauses, "
-                    "regulatory requirements, and legal gaps. "
-                    "Return specific additions and amendments needed."
-                }]
-            },
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text":
-                    f"Review this RFP draft for compliance issues:\n\n{rfp_draft}"
-                }]
+        max_tokens=1024,
+        temperature=0.2,
+        system=(
+            "You are a procurement compliance specialist. "
+            "Review RFP drafts and identify missing compliance clauses, "
+            "regulatory requirements, and legal gaps. "
+            "Return specific additions and amendments needed."
+        ),
+        messages=[
+            {"role": "user", "content":
+                f"Review this RFP draft for compliance issues:\n\n{rfp_draft}"
             }
         ],
-        temperature=0.2,
     )
-    return response.output[0].content[0].text
+    return response.content[0].text
 
 
 def run_risk_agent(rfp_draft):
     """Agent 4: Identifies procurement risks and suggests mitigations."""
-    response = client.responses.create(
+    response = client.messages.create(
         model=model_name,
-        input=[
-            {
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text":
-                    "You are a procurement risk analyst. "
-                    "Identify risks in RFP documents: vendor risks, scope risks, "
-                    "budget risks, timeline risks, and suggest mitigation strategies. "
-                    "Be concise and actionable."
-                }]
-            },
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text":
-                    f"Identify risks in this RFP:\n\n{rfp_draft}"
-                }]
+        max_tokens=1024,
+        temperature=0.2,
+        system=(
+            "You are a procurement risk analyst. "
+            "Identify risks in RFP documents: vendor risks, scope risks, "
+            "budget risks, timeline risks, and suggest mitigation strategies. "
+            "Be concise and actionable."
+        ),
+        messages=[
+            {"role": "user", "content":
+                f"Identify risks in this RFP:\n\n{rfp_draft}"
             }
         ],
-        temperature=0.2,
     )
-    return response.output[0].content[0].text
+    return response.content[0].text
 
 
 def run_assembler_agent(rfp_draft, compliance_notes, risk_notes):
     """Agent 5: Assembles the final polished RFP from all agent outputs."""
-    response = client.responses.create(
+    response = client.messages.create(
         model=model_name,
-        input=[
-            {
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text":
-                    "You are a senior procurement document specialist. "
-                    "Take an RFP draft and seamlessly incorporate compliance requirements "
-                    "and risk mitigations into a final, polished document. "
-                    "Do not duplicate content — integrate feedback naturally."
-                }]
-            },
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text":
-                    f"RFP Draft:\n{rfp_draft}\n\n"
-                    f"Compliance Notes to Incorporate:\n{compliance_notes}\n\n"
-                    f"Risk Mitigations to Incorporate:\n{risk_notes}\n\n"
-                    "Produce the final, complete RFP document."
-                }]
+        max_tokens=4096,
+        temperature=0.3,
+        system=(
+            "You are a senior procurement document specialist. "
+            "Take an RFP draft and seamlessly incorporate compliance requirements "
+            "and risk mitigations into a final, polished document. "
+            "Do not duplicate content — integrate feedback naturally."
+        ),
+        messages=[
+            {"role": "user", "content":
+                f"RFP Draft:\n{rfp_draft}\n\n"
+                f"Compliance Notes to Incorporate:\n{compliance_notes}\n\n"
+                f"Risk Mitigations to Incorporate:\n{risk_notes}\n\n"
+                "Produce the final, complete RFP document."
             }
         ],
-        temperature=0.3,
     )
-    return response.output[0].content[0].text
+    return response.content[0].text
 
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
@@ -264,33 +226,25 @@ def supplier_qa():
     rfp_text = data.get("rfp", "")
 
     try:
-        response = client.responses.create(
+        response = client.messages.create(
             model=model_name,
-            input=[
-                {
-                    "type": "message",
-                    "role": "system",
-                    "content": [{"type": "input_text", "text":
-                        "You are a procurement assistant helping suppliers understand an RFP. "
-                        "Answer clearly and professionally based on the RFP context provided."
-                    }]
-                },
-                {
-                    "type": "message",
-                    "role": "system",
-                    "content": [{"type": "input_text", "text":
-                        f"RFP Context:\n{rfp_text}"
-                    }]
-                },
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": question}]
-                }
-            ],
+            max_tokens=1024,
             temperature=0.3,
+            # RFP context is marked cacheable: suppliers ask multiple follow-up
+            # questions against the same RFP, so the prefix is reused across calls.
+            system=[
+                {"type": "text", "text":
+                    "You are a procurement assistant helping suppliers understand an RFP. "
+                    "Answer clearly and professionally based on the RFP context provided."
+                },
+                {"type": "text", "text": f"RFP Context:\n{rfp_text}",
+                 "cache_control": {"type": "ephemeral"}},
+            ],
+            messages=[
+                {"role": "user", "content": question}
+            ],
         )
-        answer = response.output[0].content[0].text
+        answer = response.content[0].text
         return jsonify({"answer": answer})
 
     except Exception as e:
