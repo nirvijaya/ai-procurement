@@ -24,7 +24,6 @@ def run_research_agent(category, budget, location):
     response = client.messages.create(
         model=model_name,
         max_tokens=1024,
-        temperature=0.2,
         system=(
             "You are a procurement market research specialist. "
             "Analyze the given procurement category and provide market context, "
@@ -48,7 +47,6 @@ def run_drafting_agent(category, budget, location, requirements, dynamic_fields,
     response = client.messages.create(
         model=model_name,
         max_tokens=4096,
-        temperature=0.3,
         system=(
             "You are an expert RFP writer with deep procurement knowledge. "
             "Draft professional, comprehensive RFP documents using the provided "
@@ -73,7 +71,6 @@ def run_compliance_agent(rfp_draft):
     response = client.messages.create(
         model=model_name,
         max_tokens=1024,
-        temperature=0.2,
         system=(
             "You are a procurement compliance specialist. "
             "Review RFP drafts and identify missing compliance clauses, "
@@ -94,7 +91,6 @@ def run_risk_agent(rfp_draft):
     response = client.messages.create(
         model=model_name,
         max_tokens=1024,
-        temperature=0.2,
         system=(
             "You are a procurement risk analyst. "
             "Identify risks in RFP documents: vendor risks, scope risks, "
@@ -115,7 +111,6 @@ def run_assembler_agent(rfp_draft, compliance_notes, risk_notes):
     response = client.messages.create(
         model=model_name,
         max_tokens=4096,
-        temperature=0.3,
         system=(
             "You are a senior procurement document specialist. "
             "Take an RFP draft and seamlessly incorporate compliance requirements "
@@ -229,7 +224,6 @@ def supplier_qa():
         response = client.messages.create(
             model=model_name,
             max_tokens=1024,
-            temperature=0.3,
             # RFP context is marked cacheable: suppliers ask multiple follow-up
             # questions against the same RFP, so the prefix is reused across calls.
             system=[
